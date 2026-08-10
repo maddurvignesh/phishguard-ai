@@ -1,0 +1,45 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ipynb_checkpoints/
+
+# Datasets (large, re-downloadable)
+data/raw/*
+!data/raw/.gitkeep
+data/processed/*
+!data/processed/.gitkeep
+top-1m.csv.zip
+
+# Trained artifacts (regenerable)
+models/
+ml/evaluation/*.png
+ml/evaluation/model_results.json
+
+# SQLite history
+*.db
+*.db-wal
+*.db-shm
+
+# Node / frontend
+frontend/node_modules/
+frontend/dist/
+frontend/.vite/
+
+# Editors / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Env / secrets
+.env
+.env.local
+*.secret
+
+# Logs
+*.log
