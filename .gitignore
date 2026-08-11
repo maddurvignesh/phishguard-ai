@@ -15,8 +15,11 @@ data/processed/*
 !data/processed/.gitkeep
 top-1m.csv.zip
 
-# Trained artifacts (regenerable)
-models/
+# Trained artifacts (regenerable — model files committed so Render can serve them)
+models/*
+!models/phishguard_model.joblib
+!models/all_models.joblib
+!models/model_meta.json
 ml/evaluation/*.png
 ml/evaluation/model_results.json
 
