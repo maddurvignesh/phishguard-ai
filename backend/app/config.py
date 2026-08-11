@@ -5,6 +5,7 @@ config.py — central configuration for the PhishGuard AI backend.
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
@@ -22,12 +23,21 @@ APP_VERSION = "1.0.0"
 MAX_URL_LENGTH = 2048
 MIN_URL_LENGTH = 4
 
-#: Frontend dev server origin (Vite) — adjust when deploying.
-CORS_ORIGINS = [
+#: Frontend dev server origins (Vite) — adjust when deploying.
+#: Set the CORS_ORIGINS environment variable (comma-separated) to the deployed
+#: frontend URL(s) to allow them on Render, e.g.
+#:   CORS_ORIGINS=https://phishguard-frontend.onrender.com
+_DEFAULT_ORIGINS = [
     "http://localhost:5173",
     "http://127.0.0.1:5173",
     "http://localhost:4173",
 ]
+_env_origins = os.environ.get("CORS_ORIGINS", "").strip()
+CORS_ORIGINS = (
+    [o.strip() for o in _env_origins.split(",") if o.strip()]
+    if _env_origins
+    else _DEFAULT_ORIGINS
+)
 
 
 def load_results() -> dict:
