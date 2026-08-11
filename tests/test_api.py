@@ -89,3 +89,70 @@ def test_predict_response_format_matches_spec(client):
     assert "risk_score" in body
     assert "features" in body
     assert isinstance(body["risk_score"], (int, float))
+
+
+def test_predict_includes_analysis_fields(client):
+    """New signature fields: analysis_id, dynamic model name, anatomy, threat DNA."""
+    r = client.post("/api/v1/predict", json={"url": "https://example.com"})
+    body = r.json()
+    assert body["analysis_id"].startswith("PG-")
+    assert body["model_name"]  # dynamic, not hardcoded
+    assert body["url_anatomy"]["components"]
+    assert set(body["url_anatomy"]["components"][0]) >= {"name", "value", "suspicious", "note"}
+    assert "URL Complexity" in body["threat_dna"]["categories"]
+
+
+def test_predict_with_specific_model(client):
+    """Model Playground endpoint: every deployed model returns a real result."""
+    for name in ("Logistic Regression", "Decision Tree", "Random Forest", "XGBoost"):
+        r = client.post(f"/api/v1/predict/model/{name}", json={"url": "https://example.com"})
+        assert r.status_code == 200
+        body = r.json()
+        assert body["model_name"] == name
+        assert body["prediction"] in ("legitimate", "phishing")
+
+
+def test_predict_with_unknown_model_rejected(client):
+    r = client.post("/api/v1/predict/model/NotAModel", json={"url": "https://example.com"})
+    assert r.status_code == 400
+
+
+def test_simulate_is_hypothetical(client):
+    """What-if: scoring an edited feature vector returns a hypothetical flag."""
+    features = {"url_length": 200, "num_subdomains": 5,
+                "suspicious_keywords_count": 4, "has_https": 0}
+    r = client.post("/api/v1/predict/simulate",
+                    json={"features": features, "model": "Random Forest"})
+    assert r.status_code == 200
+    body = r.json()
+    assert body["hypothetical"] is True
+    assert body["prediction"] in ("legitimate", "phishing")
+    assert body["model_name"] == "Random Forest"
+
+
+def test_model_health_and_models(client):
+    h = client.get("/api/v1/model-health").json()
+    assert h["status"] == "READY"
+    assert h["model_name"] == "Random Forest"
+    assert h["num_features"] >= 25
+
+    m = client.get("/api/v1/models").json()
+    names = [x["name"] for x in m["models"]]
+    assert "Random Forest" in names
+    assert m["best_model"] == "Random Forest"
+
+
+def test_history_search_filter_and_delete(client):
+    client.post("/api/v1/predict", json={"url": "https://github.com"})
+    client.post("/api/v1/predict", json={"url": "https://paypal-verify-login.webscr.example/"})
+
+    found = client.get("/api/v1/history", params={"q": "github"}).json()["results"]
+    assert found and all("github" in r["url"] for r in found)
+
+    phish = client.get("/api/v1/history", params={"prediction": "phishing"}).json()["results"]
+    assert all(r["prediction"] == "phishing" for r in phish)
+
+    target = client.get("/api/v1/history").json()["results"][0]
+    if target["analysis_id"]:
+        d = client.delete(f"/api/v1/history/{target['analysis_id']}")
+        assert d.status_code == 200

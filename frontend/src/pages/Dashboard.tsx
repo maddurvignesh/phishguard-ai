@@ -1,7 +1,17 @@
 import { useEffect, useState } from 'react'
-import { AlertTriangle, Clock, History, ShieldCheck, ShieldAlert, Siren, Trash2, Activity } from 'lucide-react'
+import {
+  Activity,
+  AlertTriangle,
+  Clock,
+  History,
+  Search,
+  ShieldAlert,
+  ShieldCheck,
+  Siren,
+  Trash2,
+} from 'lucide-react'
 import StatCard from '../components/StatCard'
-import { clearHistory, getHistory, getStats } from '../lib/api'
+import { clearHistory, deleteAnalysis, getHistory, getStats } from '../lib/api'
 import type { HistoryItem, RiskLevel, Stats } from '../lib/types'
 
 const LEVEL_BADGE: Record<RiskLevel, string> = {
@@ -12,13 +22,14 @@ const LEVEL_BADGE: Record<RiskLevel, string> = {
 }
 
 function RiskBar({ percent }: { percent: number }) {
+  const p = Math.min(100, percent)
   return (
     <div className="h-1.5 w-full rounded-full bg-[#15213680]">
       <div
         className={`h-full rounded-full transition-all duration-700 ${
-          percent >= 60 ? 'bg-red-500' : percent >= 30 ? 'bg-amber-400' : 'bg-emerald-400'
+          p >= 80 ? 'bg-red-500' : p >= 60 ? 'bg-orange-400' : p >= 30 ? 'bg-amber-400' : 'bg-emerald-400'
         }`}
-        style={{ width: `${Math.min(100, percent)}%` }}
+        style={{ width: `${p}%` }}
       />
     </div>
   )
@@ -29,10 +40,12 @@ export default function Dashboard() {
   const [history, setHistory] = useState<HistoryItem[]>([])
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
+  const [q, setQ] = useState('')
+  const [filter, setFilter] = useState('')
 
   async function refresh() {
     try {
-      const [s, h] = await Promise.all([getStats(), getHistory(20)])
+      const [s, h] = await Promise.all([getStats(), getHistory(100, q, filter)])
       setStats(s)
       setHistory(h.results)
     } catch (e) {
@@ -44,6 +57,7 @@ export default function Dashboard() {
 
   useEffect(() => {
     refresh()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   async function handleClear() {
@@ -56,12 +70,21 @@ export default function Dashboard() {
     }
   }
 
+  async function handleDelete(id: string) {
+    try {
+      await deleteAnalysis(id)
+      await refresh()
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not delete record')
+    }
+  }
+
   return (
     <main className="mx-auto max-w-7xl px-4 py-10 sm:px-6">
       <header className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <h1 className="font-display text-2xl font-bold text-white sm:text-3xl">Security Dashboard</h1>
-          <p className="mt-1 text-sm text-mist">Live statistics from every analysis performed in this installation.</p>
+          <h1 className="font-display text-2xl font-bold text-white sm:text-3xl">Analytics</h1>
+          <p className="mt-1 text-sm text-mist">Live statistics and history from every analysis performed in this installation.</p>
         </div>
         {history.length > 0 && (
           <button
@@ -78,17 +101,43 @@ export default function Dashboard() {
           <StatCard icon={Activity} label="Total analyzed" value={stats.total_analyzed.toLocaleString()} sub="URLs processed" />
           <StatCard icon={ShieldAlert} label="Phishing detected" value={stats.phishing_detected.toLocaleString()} accent="text-red-400" sub={`${stats.total_analyzed ? ((stats.phishing_detected / stats.total_analyzed) * 100).toFixed(1) : 0}% flag rate`} />
           <StatCard icon={ShieldCheck} label="Legitimate" value={stats.legitimate_detected.toLocaleString()} accent="text-emerald-400" sub="looked safe" />
-          <StatCard icon={Siren} label="Avg risk score" value={`${stats.average_risk_percent.toFixed(1)}%`} accent={stats.average_risk_percent > 50 ? 'text-orange-300' : 'text-cyan-300'} sub="rolling average" />
+          <StatCard icon={Siren} label="High / critical risk" value={stats.high_risk_analyses.toLocaleString()} accent="text-orange-300" sub="flagged analyses" />
         </section>
       )}
 
-      {history.length > 0 ? (
-        <section className="glass mt-8 overflow-hidden">
-          <div className="flex items-center gap-2 border-b border-edge px-5 py-4">
+      <section className="glass mt-8 overflow-hidden">
+        <div className="flex flex-wrap items-center gap-3 border-b border-edge px-5 py-4">
+          <div className="flex items-center gap-2">
             <History className="h-4 w-4 text-cyan-300" />
-            <h2 className="font-display text-sm font-semibold text-slate-100">Recent Analyses</h2>
-            <span className="ml-auto font-mono text-[10px] text-mist">latest first</span>
+            <h2 className="font-display text-sm font-semibold text-slate-100">Analysis History</h2>
           </div>
+          <div className="ml-auto flex flex-wrap items-center gap-2">
+            <div className="relative">
+              <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-mist" />
+              <input
+                value={q}
+                onChange={(e) => setQ(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && refresh()}
+                placeholder="Search URL…"
+                aria-label="Search analysis history"
+                className="w-48 rounded-lg border border-edge bg-[#0a1120]/80 py-1.5 pl-8 pr-3 text-xs text-slate-100 outline-none focus:border-cyan-500/60"
+              />
+            </div>
+            <select
+              value={filter}
+              onChange={(e) => setFilter(e.target.value)}
+              aria-label="Filter by prediction"
+              className="rounded-lg border border-edge bg-[#0a1120]/80 px-2 py-1.5 text-xs text-slate-200 outline-none focus:border-cyan-500/60"
+            >
+              <option value="">All predictions</option>
+              <option value="phishing">Phishing only</option>
+              <option value="legitimate">Legitimate only</option>
+            </select>
+            <button onClick={refresh} className="chip text-mist hover:text-cyan-200">Apply</button>
+          </div>
+        </div>
+
+        {history.length > 0 ? (
           <div className="overflow-x-auto">
             <table className="table-thin w-full text-left text-sm">
               <thead>
@@ -98,15 +147,18 @@ export default function Dashboard() {
                   <th className="px-5 py-3 font-medium">Prediction</th>
                   <th className="px-5 py-3 font-medium">Risk Score</th>
                   <th className="px-5 py-3 font-medium">Risk Level</th>
+                  <th className="px-5 py-3 font-medium">Model</th>
+                  <th className="px-5 py-3 font-medium">ID</th>
+                  <th className="px-5 py-3" />
                 </tr>
               </thead>
               <tbody>
                 {history.map((item, i) => (
-                  <tr key={`${item.created_at}-${i}`} className="border-b border-edge/40">
+                  <tr key={`${item.analysis_id || item.created_at}-${i}`} className="border-b border-edge/40">
                     <td className="whitespace-nowrap px-5 py-3 font-mono text-[11px] text-mist">
-                      {new Date(item.created_at).toLocaleTimeString()}
+                      {new Date(item.created_at).toLocaleString()}
                     </td>
-                    <td className="max-w-[300px] truncate px-5 py-3 font-mono text-xs text-slate-300">
+                    <td className="max-w-[260px] truncate px-5 py-3 font-mono text-xs text-slate-300" title={item.url}>
                       {item.url}
                     </td>
                     <td className="px-5 py-3">
@@ -116,7 +168,7 @@ export default function Dashboard() {
                       </span>
                     </td>
                     <td className="px-5 py-3">
-                      <div className="w-28">
+                      <div className="w-24">
                         <RiskBar percent={item.risk_score * 100} />
                       </div>
                     </td>
@@ -125,23 +177,36 @@ export default function Dashboard() {
                         {item.risk_level}
                       </span>
                     </td>
+                    <td className="whitespace-nowrap px-5 py-3 font-mono text-[10px] text-mist">{item.model || '—'}</td>
+                    <td className="whitespace-nowrap px-5 py-3 font-mono text-[10px] text-sky-300">{item.analysis_id || '—'}</td>
+                    <td className="px-5 py-3">
+                      <button
+                        onClick={() => handleDelete(item.analysis_id)}
+                        aria-label="Delete this analysis"
+                        className="rounded p-1 text-mist/60 transition-colors hover:text-red-400"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </button>
+                    </td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
-        </section>
-      ) : (
-        !loading && (
-          <div className="glass mt-8 flex flex-col items-center gap-3 p-10 text-center">
-            <Clock className="h-8 w-8 text-mist" />
-            <p className="text-sm text-mist">No analyses yet. Run a URL through the detector and it will appear here.</p>
-          </div>
-        )
-      )}
+        ) : (
+          !loading && (
+            <div className="flex flex-col items-center gap-3 p-10 text-center">
+              <Clock className="h-8 w-8 text-mist" />
+              <p className="text-sm text-mist">
+                {q || filter ? 'No analyses match your search.' : 'No analyses yet. Run a URL through the detector and it will appear here.'}
+              </p>
+            </div>
+          )
+        )}
+      </section>
 
       {loading && (
-        <div className="mt-16 animate-spin-slow mx-auto h-10 w-10 rounded-full border-2 border-cyan-400 border-t-transparent" />
+        <div className="animate-spin-slow mx-auto mt-16 h-10 w-10 rounded-full border-2 border-cyan-400 border-t-transparent" />
       )}
       {error && (
         <div className="mt-6 flex items-center gap-2 rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-300">

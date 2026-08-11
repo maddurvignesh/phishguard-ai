@@ -218,3 +218,115 @@ balancer, and serve the React build from a CDN.
 A single lightweight file with zero configuration — perfect for a local
 dashboard. We store only the minimum (time, URL truncated, verdict, score)
 and no personal information.
+
+---
+
+## Intermediate & Evaluation
+
+### 36. What is the bias-variance tradeoff?
+Bias is how far a model's average prediction is from truth (simple models are
+high-bias). Variance is how much predictions change across datasets (complex
+models are high-variance). A decision tree that memorizes the data has high
+variance; a linear model on a non-linear problem has high bias. Random Forest
+reduces variance by averaging many trees.
+
+### 37. What is underfitting?
+When the model is too simple to capture the pattern — high error on both
+training and test data. Opposite of overfitting. We tune depth / trees to land
+between the two.
+
+### 38. What is K-fold cross-validation?
+Split the data into K folds, train on K−1, test on the remaining one, repeat K
+times, average the results. More stable than one split. We used a single
+stratified 80/20 split for the final model but cross-validation is the correct
+tool for comparing hyperparameters.
+
+### 39. Why is stratified splitting important here?
+The dataset is imbalanced (~83% legitimate). A plain random split could give an
+unlucky fold. Stratification keeps the same class ratio in train and test, so
+the measured recall is trustworthy.
+
+### 40. What is class imbalance and how does it affect metrics?
+When one class (legitimate) vastly outnumbers the other (phishing). A model can
+reach high accuracy by predicting the majority class. That is why we report
+precision/recall/F1/ROC-AUC and select the model by F1 + AUC rather than
+accuracy.
+
+### 41. What is data leakage?
+When information from the test set (or from the future) reaches the model
+during training, inflating scores. We prevent it by splitting *before* training
+and fitting the StandardScaler inside the model pipeline on training data only.
+No test rows are ever used to fit anything.
+
+### 42. What is probability calibration?
+Whether a predicted 0.8 really means "80% of similar cases are positive".
+Random Forest probabilities are often not perfectly calibrated. We therefore
+call our risk score a "model probability estimate" rather than a true
+calibrated probability.
+
+### 43. What is SHAP and why didn't we use it here?
+SHAP explains each prediction by attributing a contribution to every feature.
+It is accurate but slow on 600 MB Random Forest with 250 trees at interactive
+speed. We used the model's native feature importances plus per-class statistics
+instead — transparent and honest, with the same training data behind it.
+
+### 44. What is the difference between global and local explanation?
+Global: "over all URLs, which features matter most?" (feature importance).
+Local: "for THIS URL, why did the model lean phishing?" (our explanation panel
+and What-if simulation).
+
+### 45. What is gradient boosting?
+Boosting trains weak models sequentially, each correcting the previous one's
+errors. XGBoost is a highly optimized gradient-boosted tree implementation —
+generally the strongest of the four, here marginally behind Random Forest on F1.
+
+### 46. What is an ensemble and why does it help?
+An ensemble combines many weak learners into one strong predictor. Random
+Forest (bagging) averages many trees trained on random samples/features; this
+reduces variance and almost always beats a single tree.
+
+### 47. What is a decision boundary and where is it?
+The region where the model's probability equals the threshold (0.5 here).
+Points on one side become "phishing", the other "legitimate". Linear models
+draw a straight boundary; trees draw piecewise-rectangular ones.
+
+### 48. What is regularization, and where is it used?
+Regularization penalizes complex models to prevent overfitting. Logistic
+Regression uses an L2 penalty controlled by `C`; trees use `max_depth` and
+`min_samples_split` as a structural regularizer.
+
+### 49. What is ROC-AUC vs precision-recall (PR)?
+ROC plots TPR vs FPR and stays optimistic on imbalanced data. PR plots
+precision vs recall and is more informative when the positive class is rare —
+which is exactly our phishing class. High ROC-AUC (0.976) plus decent F1 is a
+strong practical result.
+
+### 50. How do you know the model isn't just memorizing the dataset?
+The metrics come from a held-out test set the model never saw. We also check
+that Random Forest ≈ XGBoost on unseen data (both ~0.97 AUC) rather than one
+model wildly outperforming on train and collapsing on test.
+
+### 51. What is a threshold, and how could we tune it?
+The 0.5 threshold decides the hard label from the probability. Lowering it
+raises recall (catches more phishing) at the cost of more false alarms; raising
+it does the opposite. An operating-point choice the UI currently leaves at 0.5.
+
+### 52. Why is the What-if simulation scientifically honest?
+It re-runs the real model on an edited *feature vector* — the output is a real
+prediction, not a guess. It never claims to have changed the actual website and
+is explicitly labelled "hypothetical simulation".
+
+### 53. How would phishing evolve against this system?
+Attackers can register new domains, shorten URLs, or remove obvious keywords to
+dodge the statistical profile. That is why the model is probabilistic, why we
+document limitations, and why retraining on fresh data is a listed future step.
+
+### 54. What is reproducibility and how is it achieved here?
+Re-running the pipeline with the same seed (42), same split, same models and
+the saved feature matrix produces identical metrics — verified by the real
+numbers matching across runs.
+
+### 55. What would you change if you had 6 more months?
+Add a PR-curve-based operating-point study, Platt scaling, a browser extension,
+live threat-intelligence lookups, SHAP on a distilled surrogate, and a
+streaming retraining pipeline with versioned artifacts.

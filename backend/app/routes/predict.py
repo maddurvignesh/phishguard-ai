@@ -15,7 +15,7 @@ from pydantic import ValidationError
 
 from ..config import MAX_URL_LENGTH
 from ..database import record_analysis
-from ..schemas import URLInput
+from ..schemas import FeatureSimulationInput, URLInput
 from ml.model import ModelNotReadyError, get_model
 
 router = APIRouter(tags=["prediction"])
@@ -97,6 +97,54 @@ def predict_url(payload: URLInput):
         prediction=result["prediction"],
         risk_score=result["risk_score"],
         risk_level=result["risk_level"],
+        model=result.get("model_name", ""),
+        analysis_id=result.get("analysis_id", ""),
+    )
+    return result
+
+
+@router.post("/predict/simulate", summary="Score a hypothetical feature vector (What-if)")
+def simulate_features(payload: FeatureSimulationInput):
+    """
+    What-if analysis: score an edited *feature vector* with a real model.
+
+    This is a controlled ML simulation for education/demonstration — it does
+    NOT re-analyse a real URL and never claims to modify a website. The
+    response is flagged ``"hypothetical": true``.
+    """
+    try:
+        result = get_model().score_features(payload.features, payload.model or "")
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except ModelNotReadyError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    return result
+
+
+@router.post("/predict/model/{model_name}", summary="Analyze one URL with a specific model")
+def predict_with_model(model_name: str, payload: URLInput):
+    """
+    Model Playground: run the same URL through one explicitly chosen model
+    (Logistic Regression / Decision Tree / Random Forest / XGBoost).
+
+    The output format is identical to ``/predict``; only the model differs.
+    """
+    url = validate_url(payload.url)
+    try:
+        result = get_model().predict_with(model_name, url)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except ModelNotReadyError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+    result["url"] = url
+    record_analysis(
+        url=url,
+        prediction=result["prediction"],
+        risk_score=result["risk_score"],
+        risk_level=result["risk_level"],
+        model=result.get("model_name", ""),
+        analysis_id=result.get("analysis_id", ""),
     )
     return result
 
@@ -117,6 +165,8 @@ def predict_batch(payload: list[URLInput]):
             prediction=result["prediction"],
             risk_score=result["risk_score"],
             risk_level=result["risk_level"],
+            model=result.get("model_name", ""),
+            analysis_id=result.get("analysis_id", ""),
         )
         outputs.append(result)
     return {"results": outputs}

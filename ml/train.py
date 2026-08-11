@@ -49,6 +49,7 @@ from ml.preprocessing import build_feature_dataset
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 MODEL_DIR = PROJECT_ROOT / "models"
 MODEL_PATH = MODEL_DIR / "phishguard_model.joblib"
+ALL_MODELS_PATH = MODEL_DIR / "all_models.joblib"
 META_PATH = MODEL_DIR / "model_meta.json"
 
 RANDOM_STATE = 42
@@ -188,6 +189,12 @@ def run_pipeline(force_preprocess: bool = False) -> dict:
 
     best_model = fitted[best_name]
 
+    # ---- Save EVERY candidate model too (used by the Model Playground) -----
+    # The best model stays at models/phishguard_model.joblib (backward
+    # compatible with the API); the full set is kept together so the UI can
+    # compare predictions across all four classifiers honestly.
+    joblib.dump(fitted, ALL_MODELS_PATH, compress=3)
+
     y_pred_best, _ = evaluate.collect_true_preds(best_model, X_test, y_test)
 
     # ---- Charts --------------------------------------------------------
@@ -234,6 +241,7 @@ def run_pipeline(force_preprocess: bool = False) -> dict:
     meta = {
         "model_name": best_name,
         "model_file": MODEL_PATH.name,
+        "models_available": list(fitted.keys()),
         "feature_columns": list(FEATURE_COLUMNS),
         "target_names": {0: "legitimate", 1: "phishing"},
         "random_state": RANDOM_STATE,
@@ -246,6 +254,7 @@ def run_pipeline(force_preprocess: bool = False) -> dict:
     META_PATH.write_text(json.dumps(meta, indent=2, ensure_ascii=False), encoding="utf-8")
 
     print(f"[*] Model saved        -> {MODEL_PATH}")
+    print(f"[*] All models saved   -> {ALL_MODELS_PATH}")
     print(f"[*] Metadata saved     -> {META_PATH}")
     print(f"[*] Results saved      -> {evaluate.RESULTS_JSON}")
     return results

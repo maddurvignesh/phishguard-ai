@@ -25,15 +25,18 @@
 from __future__ import annotations
 
 import json
+import secrets
 from pathlib import Path
 
 import joblib
 import numpy as np
 
+from ml.analysis import threat_dna, url_anatomy
 from ml.feature_extractor import FEATURE_COLUMNS, extract_features
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 MODEL_PATH = PROJECT_ROOT / "models" / "phishguard_model.joblib"
+ALL_MODELS_PATH = PROJECT_ROOT / "models" / "all_models.joblib"
 META_PATH = PROJECT_ROOT / "models" / "model_meta.json"
 RESULTS_PATH = PROJECT_ROOT / "ml" / "evaluation" / "model_results.json"
 
@@ -287,10 +290,32 @@ class ModelManager:
     def __init__(self) -> None:
         self.model = None
         self.meta: dict = {}
+        self._all_models: dict | None = None
 
     def load(self) -> None:
         """Load (or reload) model + metadata into memory."""
         self.model, self.meta = load_model()
+
+    def load_all(self) -> dict:
+        """
+        Load the full set of trained models (for the Model Playground).
+
+        Returns a dict ``{display_name: estimator}``. Falls back to just the
+        best model when the registry file is missing, so the API never breaks.
+        """
+        if self._all_models is not None:
+            return self._all_models
+        if not self.ready:
+            self.load()
+        if not ALL_MODELS_PATH.exists():
+            self._all_models = {self.model_name: self.model}
+            return self._all_models
+        try:
+            self._all_models = joblib.load(ALL_MODELS_PATH)
+        except Exception:
+            self.load()
+            self._all_models = {self.model_name: self.model}
+        return self._all_models
 
     @property
     def ready(self) -> bool:
@@ -301,23 +326,25 @@ class ModelManager:
         return self.meta.get("model_name", "unknown")
 
     @property
+    def models_available(self) -> list[str]:
+        return self.meta.get("models_available") or list(self.load_all().keys())
+
+    @property
     def risk_levels(self) -> list[dict]:
         return self.meta.get("risk_levels", [{"max": 0.0, "label": "LOW", "description": ""}])
 
-    def predict(self, raw_url: str) -> dict:
-        """
-        Run the trained model on one URL.
+    def _score(self, estimator, X) -> tuple[float, int]:
+        """Return (P(phishing), hard label) for a single feature row."""
+        proba = float(estimator.predict_proba(X)[0, 1])
+        label = int(round(proba))
+        return proba, label
 
-        Returns a complete, frontend-ready result:
-            prediction, probability, risk_score, risk_level, confidence,
-            features, security_analysis, explanation.
+    def _build_result(self, estimator, model_name: str, raw_url: str) -> dict:
         """
-        if not self.ready:
-            self.load()
-
+        Run ``estimator`` on one URL and assemble the full frontend-ready
+        result (identical shape for the best model and the playground models).
+        """
         features = extract_features(raw_url)
-        # Build a named DataFrame so sklearn does not warn about missing
-        # feature names (the model was fitted on the same column order).
         import pandas as pd
 
         X = pd.DataFrame(
@@ -326,8 +353,7 @@ class ModelManager:
             dtype=float,
         )
 
-        proba = float(self.model.predict_proba(X)[0, 1])  # P(phishing)
-        label = int(round(proba))                          # threshold 0.5
+        proba, label = self._score(estimator, X)
         confidence = max(proba, 1.0 - proba)
 
         risk_levels = self.risk_levels if self.risk_levels else []
@@ -352,6 +378,8 @@ class ModelManager:
             display_features["_tld"] = "—"
 
         return {
+            "analysis_id": "PG-" + secrets.token_hex(6).upper(),
+            "model_name": model_name,
             "prediction": CLASS_LABELS[label],
             "label": label,
             "probability": round(proba, 6),
@@ -364,6 +392,80 @@ class ModelManager:
             "features": features,
             "security_analysis": security_analysis(features, display_features),
             "explanation": explain(features, self.meta),
+            "url_anatomy": url_anatomy(raw_url),
+            "threat_dna": threat_dna(features, self.meta),
+        }
+
+    def predict(self, raw_url: str) -> dict:
+        """
+        Run the trained best model on one URL.
+
+        Returns a complete, frontend-ready result:
+            prediction, probability, risk_score, risk_level, confidence,
+            features, security_analysis, explanation.
+        """
+        if not self.ready:
+            self.load()
+        return self._build_result(self.model, self.model_name, raw_url)
+
+    def predict_with(self, model_name: str, raw_url: str) -> dict:
+        """
+        Run a specific trained model (Model Playground).
+
+        Raises ValueError if the model name is unknown/not available.
+        """
+        if not self.ready:
+            self.load()
+        registry = self.load_all()
+        if model_name not in registry:
+            known = ", ".join(registry) or "none"
+            raise ValueError(
+                f"Model '{model_name}' is not available. Available models: {known}."
+            )
+        return self._build_result(registry[model_name], model_name, raw_url)
+
+    def score_features(self, features: dict, model_name: str = "") -> dict:
+        """
+        Score an arbitrary *feature vector* (What-if simulation).
+
+        This runs the same model on a hand-edited feature row. It is a
+        legitimate ML simulation — the hypothetical features are scored by the
+        real classifier — but it does NOT re-analyse the real URL. The UI must
+        label the result as a hypothetical simulation.
+        """
+        if not self.ready:
+            self.load()
+        estimator = self.model
+        effective_name = self.model_name
+        if model_name:
+            registry = self.load_all()
+            if model_name not in registry:
+                raise ValueError(f"Unknown model '{model_name}'.")
+            estimator = registry[model_name]
+            effective_name = model_name
+
+        import pandas as pd
+
+        X = pd.DataFrame(
+            [[float(features.get(c, 0.0)) for c in FEATURE_COLUMNS]],
+            columns=FEATURE_COLUMNS,
+            dtype=float,
+        )
+        proba, label = self._score(estimator, X)
+        confidence = max(proba, 1.0 - proba)
+        level = _risk_level(proba, self.risk_levels)
+
+        return {
+            "model_name": effective_name,
+            "prediction": CLASS_LABELS[label],
+            "label": label,
+            "probability": round(proba, 6),
+            "risk_score": round(proba, 4),
+            "risk_score_percent": round(proba * 100, 1),
+            "confidence_percent": round(confidence * 100, 1),
+            "risk_level": level["label"],
+            "risk_description": level.get("description", ""),
+            "hypothetical": True,
         }
 
 

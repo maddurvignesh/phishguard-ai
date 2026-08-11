@@ -27,5 +27,17 @@ class BulkURLInput(BaseModel):
     urls: list[URLInput] = Field(..., max_length=50)
 
 
+class FeatureSimulationInput(BaseModel):
+    """Payload for POST /predict/simulate (What-if analysis)."""
+
+    features: dict[str, float] = Field(
+        ..., description="Feature vector to score (typically the observed "
+                         "features with one or two edited values)."
+    )
+    model: str | None = Field(
+        None, description="Optional model name (defaults to the deployed best model)."
+    )
+
+
 class HistoryParams(BaseModel):
     limit: int = Field(20, ge=1, le=100)

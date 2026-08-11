@@ -33,9 +33,11 @@
 | 🎯 **Fair model selection** | picked by **F1 + ROC-AUC**, not misleading accuracy |
 | 🚀 **Loaded once, served fast** | model is loaded at API startup, never retrained per request |
 | 🧾 **Explainable by design** | each verdict shows *why*, from real per-class statistics |
+| 🧬 **URL Anatomy + Threat DNA** | visual URL breakdown + radar profile from real features |
+| 🔬 **Model Playground + What-if** | compare all 4 models; simulate feature edits honestly |
 | 🔒 **Defensive by default** | URLs are read as **text only** — the app never crawls or visits sites |
 | 🖥️ **Professional UI** | dark cybersecurity aesthetic, glassmorphism, live charts |
-| 📚 **Exam-ready docs** | report, 35 viva Q&As, 12-slide presentation outline |
+| 📚 **Exam-ready docs** | report, 55 viva Q&As, presentation outline, demo script |
 
 ## 🚀 Quick Start (TL;DR)
 
@@ -290,10 +292,15 @@ Interactive docs: <http://127.0.0.1:8000/docs>
 |---|---|---|
 | `POST` | `/api/v1/predict` | Analyze one URL |
 | `POST` | `/api/v1/predict/batch` | Analyze up to 50 URLs |
+| `POST` | `/api/v1/predict/model/{name}` | Analyze one URL with a specific model (Playground) |
+| `POST` | `/api/v1/predict/simulate` | Score an edited feature vector (What-if, flagged hypothetical) |
 | `GET` | `/api/v1/health` | Liveness + model status |
 | `GET` | `/api/v1/model-info` | Training summary, metrics, ROC, confusion matrix, feature importance |
+| `GET` | `/api/v1/models` | Deployed models + their test metrics |
+| `GET` | `/api/v1/model-health` | Model status, version, training info |
 | `GET` | `/api/v1/statistics` | Dashboard totals from SQLite history |
-| `GET` | `/api/v1/history` | Recent analyses (newest first) |
+| `GET` | `/api/v1/history?q=&prediction=&limit=` | Search / filter recent analyses |
+| `DELETE` | `/api/v1/history/{analysis_id}` | Delete one analysis |
 | `DELETE` | `/api/v1/history` | Clear local history |
 
 ### Example
@@ -310,9 +317,13 @@ curl -X POST http://127.0.0.1:8000/api/v1/predict \
   "risk_score": 0.001,
   "risk_level": "LOW",
   "confidence": 0.999,
+  "analysis_id": "PG-4F2A91C07B3E",
+  "model_name": "Random Forest",
   "features": { "...": "32 numeric URL features..." },
   "security_analysis": ["8 explainable verdict cards"],
-  "explanation": ["what actually moved the score"]
+  "explanation": ["what actually moved the score"],
+  "url_anatomy": { "components": ["protocol, subdomain, domain, path, query"] },
+  "threat_dna": { "categories": { "Keyword Suspicion": 100.0 } }
 }
 ```
 
@@ -321,24 +332,25 @@ curl -X POST http://127.0.0.1:8000/api/v1/predict \
 ```
 phishguard-ai/
 ├── frontend/            React + TypeScript + Tailwind + Recharts UI
-│   └── src/pages/       Home (detector) · Insights · Dashboard
+│   └── src/pages/       Home (scanner) · Playground · Insights · PhishingLab · Dashboard · ApiLab
 ├── backend/             FastAPI app
-│   └── app/             main.py · routes/ · database.py (SQLite) · config.py
+│   └── app/             main.py · routes/ · database.py (SQLite) · config.py · schemas.py
 ├── ml/                  ★ the machine-learning pipeline
 │   ├── fetch_dataset.py      download public datasets
 │   ├── preprocessing.py      clean → features (data/processed)
 │   ├── feature_extractor.py  ★ 32 URL features (training AND inference)
-│   ├── train.py              train LR/DT/RF/XGB → evaluate → save best
+│   ├── analysis.py           URL Anatomy + Threat DNA (from real features/stats)
+│   ├── train.py              train LR/DT/RF/XGB → evaluate → save all models
 │   ├── evaluate.py           metrics + charts + model_results.json
-│   ├── model.py              load-once inference service + explanations
+│   ├── model.py              load-once inference + explainability + What-if
 │   └── predict.py            CLI inference
 ├── data/
 │   ├── raw/              public datasets (see §7)       [gitignored]
 │   └── processed/        features.csv + dataset_summary.json  [gitignored]
-├── models/               phishguard_model.joblib + model_meta.json  [gitignored]
+├── models/               best model + all_models.joblib + model_meta.json  [gitignored]
 ├── notebooks/            optional EDA notebooks
-├── tests/                pytest suite — 58 tests
-├── docs/                 project_report.md · viva_questions.md · presentation_outline.md
+├── tests/                pytest suite — 64 tests
+├── docs/                 project_report.md · viva_questions.md · presentation_outline.md · demo_script.md
 ├── requirements.txt
 ├── .gitignore
 └── README.md
@@ -347,10 +359,10 @@ phishguard-ai/
 ## 17 · Testing
 
 ```bash
-python -m pytest tests -q    # → 58 passed
+python -m pytest tests -q    # → 64 passed
 ```
 
-Covers: URL feature extraction, label coercion, invalid-URL handling, model-loading errors, `/predict` response format, `/model-info` metrics, statistics & history, and the guarantee that **training and inference share identical feature columns**.
+Covers: URL feature extraction, label coercion, invalid-URL handling, model-loading errors, `/predict` response format, `/model-info` metrics, statistics & history, URL anatomy / Threat DNA fields, per-model prediction, the What-if simulation endpoint, model health, history search/filter/delete, and the guarantee that **training and inference share identical feature columns**.
 
 ## 18 · Limitations
 

@@ -24,8 +24,8 @@ import {
   YAxis,
 } from 'recharts'
 import StatCard from '../components/StatCard'
-import { getModelInfo } from '../lib/api'
-import type { ModelInfo } from '../lib/types'
+import { getModelHealth, getModelInfo } from '../lib/api'
+import type { ModelHealth, ModelInfo } from '../lib/types'
 
 const MODEL_SHORT = {
   'Logistic Regression': 'Logistic Reg.',
@@ -84,12 +84,16 @@ function ChartCard({ title, subtitle, children }: { title: string; subtitle?: st
 
 export default function Insights() {
   const [info, setInfo] = useState<ModelInfo | null>(null)
+  const [health, setHealth] = useState<ModelHealth | null>(null)
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
     getModelInfo()
       .then(setInfo)
       .catch((e) => setError(e instanceof Error ? e.message : 'Failed to load model info'))
+    getModelHealth()
+      .then(setHealth)
+      .catch(() => setHealth(null))
   }, [])
 
   if (error) {
@@ -167,6 +171,46 @@ export default function Insights() {
           Best model: <strong className="text-cyan-300">{info.best_model}</strong>
         </div>
       </header>
+
+      {/* ============ MODEL HEALTH ============ */}
+      {health && (
+        <section className="glass mt-6 p-5">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <h2 className="font-display text-sm font-semibold text-slate-100">Model Health</h2>
+            <span className={`inline-flex items-center gap-2 rounded-full px-3 py-1 text-[10px] font-bold ring-1 ${
+              health.status === 'READY'
+                ? 'bg-emerald-500/15 text-emerald-300 ring-emerald-500/30'
+                : 'bg-red-500/15 text-red-300 ring-red-500/30'
+            }`}>
+              <span className={`h-1.5 w-1.5 rounded-full ${health.status === 'READY' ? 'bg-emerald-400' : 'bg-red-400'}`} />
+              MODEL STATUS: {health.status}
+            </span>
+          </div>
+          <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-7">
+            {[
+              ['Current model', health.model_name],
+              ['Model version', health.model_version || '—'],
+              ['Trained', health.trained_at ? new Date(health.trained_at).toLocaleDateString() : '—'],
+              ['Dataset size', health.dataset_size ? health.dataset_size.toLocaleString() : '—'],
+              ['Features', String(health.num_features)],
+              ['Train / Test', health.train_size && health.test_size ? `${(health.train_size / 1000).toFixed(0)}k / ${(health.test_size / 1000).toFixed(0)}k` : '—'],
+              ['Deployed models', String(health.models_available.length)],
+            ].map(([k, v]) => (
+              <div key={k} className="rounded-xl border border-edge bg-[#0a1120]/70 p-3">
+                <div className="text-[10px] uppercase tracking-wider text-mist">{k}</div>
+                <div className="mt-1 truncate font-mono text-sm text-cyan-200">{v}</div>
+              </div>
+            ))}
+          </div>
+          {health.metrics && (
+            <p className="mt-3 text-[11px] text-mist">
+              Deployed metrics (test set): F1 <strong className="text-emerald-300">{(health.metrics.f1 * 100).toFixed(1)}%</strong> · ROC-AUC{' '}
+              <strong className="text-cyan-300">{(health.metrics.roc_auc * 100).toFixed(1)}%</strong>. Seed {health.random_state ?? '—'} · stratified split.
+              The model estimates probability, not certainty.
+            </p>
+          )}
+        </section>
+      )}
 
       <section className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
         <StatCard icon={Database} label="Dataset size" value={d.rows_after_clean.toLocaleString()} sub={`↑ ${d.raw_rows_total.toLocaleString()} raw records`} />
