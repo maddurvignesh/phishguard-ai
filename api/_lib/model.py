@@ -2,6 +2,7 @@
 model.py — ModelManager adapted for Vercel serverless functions.
 
 The model is loaded once per cold start and cached across warm invocations.
+On Vercel, models are downloaded from GitHub Releases on first request.
 """
 
 from __future__ import annotations
@@ -9,24 +10,29 @@ from __future__ import annotations
 import json
 import os
 import secrets
+import tempfile
 from pathlib import Path
+from urllib.request import urlretrieve
 
 import joblib
 import numpy as np
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 
-# Try compressed models first (for Vercel), fallback to original
-_MODEL_COMPRESSED = PROJECT_ROOT / "models" / "phishguard_model_compressed.joblib"
-_MODEL_ORIGINAL = PROJECT_ROOT / "models" / "phishguard_model.joblib"
-MODEL_PATH = _MODEL_COMPRESSED if _MODEL_COMPRESSED.exists() else _MODEL_ORIGINAL
-
-_ALL_MODELS_COMPRESSED = PROJECT_ROOT / "models" / "all_models_compressed.joblib"
-_ALL_MODELS_ORIGINAL = PROJECT_ROOT / "models" / "all_models.joblib"
-ALL_MODELS_PATH = _ALL_MODELS_COMPRESSED if _ALL_MODELS_COMPRESSED.exists() else _ALL_MODELS_ORIGINAL
-
+# Local paths (used in development)
+MODEL_PATH = PROJECT_ROOT / "models" / "phishguard_model.joblib"
+ALL_MODELS_PATH = PROJECT_ROOT / "models" / "all_models.joblib"
 META_PATH = PROJECT_ROOT / "models" / "model_meta.json"
 RESULTS_PATH = PROJECT_ROOT / "ml" / "evaluation" / "model_results.json"
+
+# Vercel: download model from GitHub Releases if not available locally
+MODEL_STORAGE_URL = os.environ.get("MODEL_STORAGE_URL", "")
+META_STORAGE_URL = os.environ.get("META_STORAGE_URL", "")
+RESULTS_STORAGE_URL = os.environ.get("RESULTS_STORAGE_URL", "")
+
+# Cache directory for downloaded models
+_CACHE_DIR = Path(tempfile.gettempdir()) / "phishguard_models"
+_CACHE_DIR.mkdir(parents=True, exist_ok=True)
 
 CLASS_LABELS = {0: "legitimate", 1: "phishing"}
 
@@ -35,23 +41,50 @@ class ModelNotReadyError(RuntimeError):
     pass
 
 
+def _download_if_needed(url: str, local_path: Path) -> Path:
+    """Download a file from URL if it doesn't exist locally."""
+    if local_path.exists():
+        return local_path
+    
+    if not url:
+        return local_path
+    
+    cache_path = _CACHE_DIR / local_path.name
+    if cache_path.exists():
+        return cache_path
+    
+    print(f"[PhishGuard] Downloading {local_path.name} from storage...")
+    try:
+        urlretrieve(url, cache_path)
+        print(f"[PhishGuard] Downloaded to {cache_path}")
+        return cache_path
+    except Exception as e:
+        print(f"[PhishGuard] Failed to download: {e}")
+        return local_path
+
+
 def load_model() -> tuple[object, dict]:
-    if not MODEL_PATH.exists() or not META_PATH.exists():
+    # Try to download model if not available locally
+    model_path = _download_if_needed(MODEL_STORAGE_URL, MODEL_PATH) if MODEL_STORAGE_URL else MODEL_PATH
+    meta_path = _download_if_needed(META_STORAGE_URL, META_PATH) if META_STORAGE_URL else META_PATH
+    
+    if not model_path.exists() or not meta_path.exists():
         raise ModelNotReadyError(
             "Trained model not found. Run `python -m ml.train` first."
         )
     try:
-        estimator = joblib.load(MODEL_PATH)
-        meta = json.loads(META_PATH.read_text(encoding="utf-8"))
+        estimator = joblib.load(model_path)
+        meta = json.loads(meta_path.read_text(encoding="utf-8"))
     except Exception as exc:
         raise ModelNotReadyError(f"Could not load model: {exc}") from exc
     return estimator, meta
 
 
 def load_results() -> dict:
-    if not RESULTS_PATH.exists():
+    results_path = _download_if_needed(RESULTS_STORAGE_URL, RESULTS_PATH) if RESULTS_STORAGE_URL else RESULTS_PATH
+    if not results_path.exists():
         return {}
-    return json.loads(RESULTS_PATH.read_text(encoding="utf-8"))
+    return json.loads(results_path.read_text(encoding="utf-8"))
 
 
 def _risk_level(probability: float, risk_levels: list[dict]) -> dict:
