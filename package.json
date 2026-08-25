@@ -1,0 +1,8 @@
+{
+  "name": "phishguard-ai",
+  "private": true,
+  "scripts": {
+    "build": "cd frontend && npm run build",
+    "install:all": "pip install -r requirements.txt && cd frontend && npm install"
+  }
+}
