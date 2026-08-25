@@ -15,13 +15,18 @@ data/processed/*
 !data/processed/.gitkeep
 top-1m.csv.zip
 
-# Trained artifacts (regenerable — model files committed so Render can serve them)
+# Trained artifacts
 models/*
 !models/phishguard_model.joblib
 !models/all_models.joblib
+!models/phishguard_model_compressed.joblib
+!models/all_models_compressed.joblib
 !models/model_meta.json
 ml/evaluation/*.png
 ml/evaluation/model_results.json
+
+# Vercel
+.vercel/
 
 # SQLite history
 *.db
