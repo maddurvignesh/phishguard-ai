@@ -2,43 +2,7 @@
   "version": 2,
   "builds": [
     {
-      "src": "api/predict.py",
-      "use": "@vercel/python"
-    },
-    {
-      "src": "api/predict_batch.py",
-      "use": "@vercel/python"
-    },
-    {
-      "src": "api/predict_model.py",
-      "use": "@vercel/python"
-    },
-    {
-      "src": "api/predict_simulate.py",
-      "use": "@vercel/python"
-    },
-    {
-      "src": "api/health.py",
-      "use": "@vercel/python"
-    },
-    {
-      "src": "api/model_info.py",
-      "use": "@vercel/python"
-    },
-    {
-      "src": "api/model_health.py",
-      "use": "@vercel/python"
-    },
-    {
-      "src": "api/models.py",
-      "use": "@vercel/python"
-    },
-    {
-      "src": "api/statistics.py",
-      "use": "@vercel/python"
-    },
-    {
-      "src": "api/history.py",
+      "src": "api/index.py",
       "use": "@vercel/python"
     },
     {
@@ -49,7 +13,7 @@
   "routes": [
     {
       "src": "/api/(.*)",
-      "dest": "/api/$1"
+      "dest": "/api/index.py"
     },
     {
       "handle": "filesystem"
