@@ -2,15 +2,48 @@
   "version": 2,
   "builds": [
     {
-      "src": "api/**/*.py",
+      "src": "api/predict.py",
+      "use": "@vercel/python"
+    },
+    {
+      "src": "api/predict_batch.py",
+      "use": "@vercel/python"
+    },
+    {
+      "src": "api/predict_model.py",
+      "use": "@vercel/python"
+    },
+    {
+      "src": "api/predict_simulate.py",
+      "use": "@vercel/python"
+    },
+    {
+      "src": "api/health.py",
+      "use": "@vercel/python"
+    },
+    {
+      "src": "api/model_info.py",
+      "use": "@vercel/python"
+    },
+    {
+      "src": "api/model_health.py",
+      "use": "@vercel/python"
+    },
+    {
+      "src": "api/models.py",
+      "use": "@vercel/python"
+    },
+    {
+      "src": "api/statistics.py",
+      "use": "@vercel/python"
+    },
+    {
+      "src": "api/history.py",
       "use": "@vercel/python"
     },
     {
       "src": "frontend/package.json",
-      "use": "@vercel/static",
-      "config": {
-        "distDir": "dist"
-      }
+      "use": "@vercel/static"
     }
   ],
   "routes": [
@@ -25,14 +58,5 @@
       "src": "/(.*)",
       "dest": "/frontend/$1"
     }
-  ],
-  "outputDirectory": "frontend/dist",
-  "installCommand": "cd frontend && npm install",
-  "buildCommand": "cd frontend && npm run build",
-  "includeFiles": ["_lib/**"],
-  "env": {
-    "MODEL_STORAGE_URL": "https://raw.githubusercontent.com/maddurvignesh/phishguard-ai/main/models/phishguard_model.joblib",
-    "META_STORAGE_URL": "https://raw.githubusercontent.com/maddurvignesh/phishguard-ai/main/models/model_meta.json",
-    "RESULTS_STORAGE_URL": "https://raw.githubusercontent.com/maddurvignesh/phishguard-ai/main/ml/evaluation/model_results.json"
-  }
+  ]
 }
