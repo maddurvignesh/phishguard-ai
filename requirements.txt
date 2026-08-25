@@ -1,23 +1,5 @@
-# ============================================================
-# PhishGuard AI — Python dependencies
-# ============================================================
-# Machine Learning
-pandas==2.2.3
-numpy==2.1.3
-scikit-learn==1.5.2
+# PhishGuard AI — Vercel inference dependencies (minimal)
 joblib==1.4.2
-xgboost==2.1.3
-
-# Visualization (training-time charts only)
-matplotlib==3.9.2
-seaborn==0.13.2
-
-# Backend API
-fastapi==0.115.6
-uvicorn[standard]==0.32.1
-pydantic==2.10.4
-python-multipart==0.0.20  # required by some FastAPI forms
-
-# Testing
-pytest==8.3.4
-httpx==0.28.1
+numpy==2.1.3
+pandas==2.2.3
+scikit-learn==1.5.2
